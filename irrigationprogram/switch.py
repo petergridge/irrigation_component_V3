@@ -23,7 +23,6 @@ from homeassistant.components.switch import (
 
 from .const import (
     DOMAIN,
-    SWITCH_ID_FORMAT,
     ATTR_START,
     ATTR_RUN_FREQ,
     ATTR_RUN_DAYS,
@@ -35,7 +34,14 @@ from .const import (
     ATTR_IGNORE_RAIN_SENSOR,
     ATTR_ZONES,
     ATTR_ZONE,
+    ATTR_WATER,
+    ATTR_WAIT,
+    ATTR_REPEAT,
+    ATTR_REMAINING,
+    DFLT_ICON_WAIT,
+    DFLT_ICON_RAIN,
     DFLT_ICON,
+    
 )
 
 from homeassistant.const import (
@@ -54,18 +60,22 @@ SWITCH_SCHEMA = vol.All(
     cv.deprecated(ATTR_ENTITY_ID),
     vol.Schema(
         {
-        vol.Required(ATTR_FRIENDLY_NAME): cv.string,
+        vol.Optional(ATTR_FRIENDLY_NAME): cv.string,
         vol.Required(ATTR_START): cv.entity_domain('input_datetime'),
         vol.Exclusive(ATTR_RUN_FREQ,"FRQP"): cv.entity_domain('input_select'),
         vol.Exclusive(ATTR_RUN_DAYS,"FRQP"): cv.entity_domain('input_select'),
         vol.Optional(ATTR_IRRIGATION_ON): cv.entity_domain('input_boolean'),
         vol.Optional(ATTR_RAIN_SENSOR): cv.entity_domain('binary_sensor'),
-        vol.Optional(ATTR_IGNORE_RAIN_SENSOR): cv.entity_domain('input_boolean'),
         vol.Optional(ATTR_ICON,default=DFLT_ICON): cv.icon,
         vol.Required(ATTR_ZONES): [{
             vol.Required(ATTR_ZONE): cv.entity_domain(CONST_SWITCH),
+            vol.Optional(ATTR_FRIENDLY_NAME): cv.string,
             vol.Exclusive(ATTR_IGNORE_RAIN_SENSOR,"RS"): cv.entity_domain('input_boolean'),
             vol.Exclusive(ATTR_IGNORE_RAIN_BOOL,"RS"): cv.boolean,
+            vol.Required(ATTR_WATER): cv.entity_domain('input_number'),
+            vol.Optional(ATTR_WAIT): cv.entity_domain('input_number'),
+            vol.Optional(ATTR_REPEAT): cv.entity_domain('input_number'),
+            vol.Optional(ATTR_ICON,default=DFLT_ICON): cv.icon,
         }],
         vol.Optional(CONF_UNIQUE_ID): cv.string,
         }
@@ -90,7 +100,6 @@ async def _async_create_entities(hass, config):
         run_days                = device_config.get(ATTR_RUN_DAYS)
         irrigation_on           = device_config.get(ATTR_IRRIGATION_ON)
         rain_sensor             = device_config.get(ATTR_RAIN_SENSOR)
-        ignore_rain_sensor      = device_config.get(ATTR_IGNORE_RAIN_SENSOR)
         icon                    = device_config.get(ATTR_ICON)
         zones                   = device_config.get(ATTR_ZONES)
         unique_id               = device_config.get(CONF_UNIQUE_ID)
@@ -105,8 +114,9 @@ async def _async_create_entities(hass, config):
                 run_days,
                 irrigation_on,
                 rain_sensor,
-                ignore_rain_sensor,
                 icon,
+                DFLT_ICON_WAIT,
+                DFLT_ICON_RAIN,
                 zones,
                 unique_id,
             )
@@ -132,8 +142,9 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
         run_days,
         irrigation_on,
         rain_sensor,
-        ignore_rain_sensor,
         icon,
+        wait_icon,
+        rain_icon,
         zones,
         unique_id,
     ):
@@ -144,13 +155,15 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
 
         """Initialize a Irrigation program."""
         self._name               = friendly_name
+        self._program_name       = friendly_name
         self._start_time         = start_time
         self._run_freq           = run_freq
         self._run_days           = run_days
         self._irrigation_on      = irrigation_on
         self._rain_sensor        = rain_sensor
-        self._ignore_rain_sensor = ignore_rain_sensor
         self._icon               = icon
+        self._wait_icon          = wait_icon
+        self._rain_icon          = rain_icon
         self._zones              = zones
         self._state_attributes   = None
         self._state              = False
@@ -159,51 +172,45 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
         self._device_id          = device_id
         self._running            = False
         self._last_run           = None
-        self._time               = None
         self._triggered_by_template = False
+        self._template           = None
 
+        """ Validate and Build a template from the attributes provided """
         if  hass.states.async_available(self._start_time):
-            _LOGGER.error('%s not found',self._start_time)
+            _LOGGER.error('%s not found, check your configuration, program will not start',self._start_time)
 
-        if self._ignore_rain_sensor is not None:
-            if  hass.states.async_available(self._ignore_rain_sensor):
-                _LOGGER.warning('%s not found',self._ignore_rain_sensor)
-
-        """ Build a template from the attributes provided """
-        self._template = None
-        template = "states." + self.entity_id + \
-                    ".attributes.time == states('" + self._start_time + "') "
+        _LOGGER.debug('Start Time %s: %s',self._start_time, hass.states.get(self._start_time))
+        template = "states('sensor.time')" + " + ':00' == states('" + self._start_time + "') "
 
         if self._irrigation_on is not None:
+            _LOGGER.debug('Irrigation on %s: %s',self._irrigation_on, hass.states.get(self._irrigation_on))
             if  hass.states.async_available(self._irrigation_on):
-                _LOGGER.warning('%s not found',self._irrigation_on)
-            template = template + " and is_state('" + self._irrigation_on + "', 'on') "
+                _LOGGER.warning('%s not found, check your configuration',self._irrigation_on)
+            else:
+                template = template + " and is_state('" + self._irrigation_on + "', 'on') "
+
         if self._run_days is not None:
+            _LOGGER.debug('Run Days %s: %s',self._run_days, hass.states.get(self._run_days))
             if  hass.states.async_available(self._run_days):
-                _LOGGER.warning('%s not found',self._run_days)
-            template = template + " and now().strftime('%a') in states('" + self._run_days + "')"
+                _LOGGER.warning('%s not found, check your configuration',self._run_days)
+            else:
+                template = template + " and now().strftime('%a') in states('" + self._run_days + "')"
+
         if self._run_freq is not None:
+            _LOGGER.debug('Run Frequency %s: %s',self._run_freq, hass.states.get(self._run_freq))
             if  hass.states.async_available(self._run_freq):
-                _LOGGER.warning('%s not found',self._run_freq)
-            template = template + \
-                    " and states('" + run_freq + "')|int" + \
-                    " <= ((as_timestamp(now()) " + \
-                    "- as_timestamp(states." + self.entity_id + \
-                    ".attributes.last_ran) | int) /86400) | int(0) "
+                _LOGGER.warning('%s not found, check your configuration',self._run_freq)
+            else:
+                template = template + \
+                        " and states('" + run_freq + "')|int" + \
+                        " <= ((as_timestamp(now()) " + \
+                        "- as_timestamp(states." + self.entity_id + \
+                        ".attributes.last_ran) | int) /86400) | int(0) "
 
         template = "{{ " + template + " }}"
 
         _LOGGER.debug('-------------------- on start: %s ----------------------------',self._name)
         _LOGGER.debug('Template: %s', template)
-
-        if self._start_time is not None:
-            _LOGGER.debug('Start Time %s: %s',self._start_time, hass.states.get(self._start_time))
-        if self._irrigation_on is not None:
-            _LOGGER.debug('Irrigation on %s: %s',self._irrigation_on, hass.states.get(self._irrigation_on))
-        if self._run_days is not None:
-            _LOGGER.debug('Run Days %s: %s',self._run_days, hass.states.get(self._run_days))
-        if self._run_freq is not None:
-            _LOGGER.debug('Run Frequency %s: %s',self._run_freq, hass.states.get(self._run_freq))
 
         template       = cv.template(template)
         template.hass  = hass
@@ -227,8 +234,7 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
             if self._last_run is None:
                 self._last_run = dt_util.as_local(time_date).date().isoformat()
 
-        self._time = dt_util.as_local(dt_util.as_local(now)).strftime("%H:%M:00")
-        ATTRS      = {'last_ran':self._last_run, 'time': self._time}
+        ATTRS      = {'last_ran':self._last_run, ATTR_REMAINING: 0}
         setattr(self, '_state_attributes', ATTRS)
 
         """ house keeping to help ensure solenoids are in a safe state """
@@ -285,38 +291,33 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
         return self._state_attributes
 
     async def async_update(self):
-        now        = dt_util.utcnow()
-        time_date  = dt_util.start_of_local_day(dt_util.as_local(now))
-        self._time = dt_util.as_local(dt_util.as_local(now)).strftime("%H:%M:00")
-        ATTRS      = {'last_ran':self._last_run, 'time': self._time}
-        setattr(self, '_state_attributes', ATTRS)
-        self.async_write_ha_state()
 
         """Update the state from the template."""
         if self._running == False:
             if self._template.async_render():
-                self._running = True
                 self._triggered_by_template = True
-                self.async_write_ha_state()
-                await self.async_turn_on()
+                loop = asyncio.get_event_loop()
+                loop.create_task(self.async_turn_on())
+
+        self.async_write_ha_state()
 
     async def async_turn_on(self, **kwargs):
         
-        self.async_write_ha_state()
+        """ Initialise for stop programs service call """
+        p_icon        = self._icon
+        p_name        = self._name
+        self._running = True
+        self._stop    = False
+        self._state   = True
+        self.async_schedule_update_ha_state()
+        step = 1
 
         """ stop all programs but this one """
         DATA = {'ignore': self._device_id}
         await self.hass.services.async_call(DOMAIN,
                                             'stop_programs',
                                             DATA)
-
-        """ give the stop_programs call time to complete """
         await asyncio.sleep(1)
-
-        """ Initialise for stop programs service call """
-        self._state = True
-        self._stop  = False
-        self.async_write_ha_state()
 
         _LOGGER.debug('-------------------- on execution: %s ----------------------------',self._name)
         _LOGGER.debug('Template: %s', self._template)
@@ -332,94 +333,156 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
         """ Iterate through all the defined zones """
         for zone in self._zones:
             z_ignore      = zone.get(ATTR_IGNORE_RAIN_SENSOR)
-            z_ignore_bool = zone.get(ATTR_IGNORE_RAIN_BOOL)
+            z_ignore_bool = zone.get(ATTR_IGNORE_RAIN_BOOL, False)
             z_zone        = zone.get(ATTR_ZONE)
+            z_water_v     = zone.get(ATTR_WATER)
+            z_wait_v      = zone.get(ATTR_WAIT)
+            z_repeat_v    = zone.get(ATTR_REPEAT)
+            z_icon        = zone.get(ATTR_ICON)
+            z_name        = zone.get(ATTR_FRIENDLY_NAME)
+
+            if  z_ignore is not None and self.hass.states.async_available(z_ignore):
+                _LOGGER.error('%s not found',z_ignore)
+                continue
+            if  z_water_v is not None and self.hass.states.async_available(z_water_v):
+                _LOGGER.error('%s not found',z_water_v)
+                continue
+            if  z_wait_v is not None and self.hass.states.async_available(z_wait_v):
+                _LOGGER.error('%s not found',z_wait_v)
+            if  z_repeat_v is not None and self.hass.states.async_available(z_repeat_v):
+                _LOGGER.error('%s not found',z_repeat_v)
+                continue
 
             _LOGGER.debug('------------ on execution zone: %s--------', z_zone)
-            if self._rain_sensor is not None:
-                _LOGGER.debug('Rain Sensor %s: %s',self._rain_sensor, self.hass.states.get(self._rain_sensor))
-            if self._ignore_rain_sensor is not None:
-                _LOGGER.debug('Ignore Rain Sensor %s: %s',self._ignore_rain_sensor, self.hass.states.get(self._ignore_rain_sensor))
+            raining = False
 
             if self._triggered_by_template == False:
                 _LOGGER.debug('------------Irrigation Manually triggered, rain sensor not evaluated--------')
-            else: #if self._triggered_by_template == True:
+            else:
                 """ assess the rain sensor """
-                alt_template = ""
                 if self._rain_sensor is not None:
+                    _LOGGER.debug('rain sensor: %s, check your configuration',self.hass.states.get(self._rain_sensor))
                     if  self.hass.states.get(self._rain_sensor) == None:
-                        _LOGGER.warning('%s not found',self._rain_sensor)
-                    alt_template = alt_template + "{{ ( is_state('" + self._rain_sensor + "', 'off') "
-                    if  self._ignore_rain_sensor is not None:
-                        alt_template = alt_template + " or is_state('" + self._ignore_rain_sensor + "', 'on') "
-                    if  z_ignore is not None:
-                        alt_template = alt_template + " or is_state('" + z_ignore + "', 'on') "
-                    alt_template = alt_template + " ) }}"
-
-                _LOGGER.debug('Rain Sensor Template: %s',alt_template)
-
-                alt_template      = cv.template(alt_template)
-                alt_template.hass = self.hass
-                try:
-                    evaluated = alt_template.async_render()
-                except:
-                    _LOGGER.error('Rain Sensor template %s, invalid: %s',
-                                  self._name,
-                                  self._template)
-                    continue
-
-                if not z_ignore_bool: #ignore rain sensor at the zone level - boolean option
-                    _LOGGER.debug('z ignore bool is not true')
-                    if evaluated == False:
-                        #if called from a service-run the program
-                        _LOGGER.debug('raining dont run, continue')
+                        _LOGGER.warning('rain sensor: %s not found',self._rain_sensor)
+                    else:
+                        raining = self.hass.states.is_state(self._rain_sensor,'on')
+                        _LOGGER.debug('raining:%s, check your configuration',raining)
+                """ assess the ignore rain sensor """
+                if  z_ignore is not None:
+                    _LOGGER.debug('Ignore rain sensor: %s',self.hass.states.get(z_ignore))
+                    if  self.hass.states.get(z_ignore) == None:
+                        _LOGGER.warning('Ignore rain sensor: %s not found, check your configuration',z_ignore)
+                    else:
+                         z_ignore_bool = self.hass.states.is_state(z_ignore,'on')
+                """ process rain sensor """
+                if not z_ignore_bool: #ignore rain sensor
+                    _LOGGER.debug('Do not ignore the rain sensor')
+                    if raining:
+                        _LOGGER.debug('raining do not run, continue to next zone')
+                        ''' set the icon to Raining - for a few seconds '''
+                        self._icon = self._rain_icon
+                        self._name = self._program_name + "-" + z_name
+                        self.async_schedule_update_ha_state()
+                        await asyncio.sleep(5)
+                        self._icon = p_icon
+                        self._name = self._program_name
+                        self.async_schedule_update_ha_state()
+                        await asyncio.sleep(1)
                         continue
 
-            """ evaluates to true - continue watering"""
-            self._running = True
-
-            """Update last run date/time attribute """
-            now            = dt_util.utcnow()
-            time_date      = dt_util.start_of_local_day(dt_util.as_local(now))
-            self._last_run = dt_util.as_local(time_date).date().isoformat()
-            self._time     = dt_util.as_local(dt_util.as_local(now)).strftime("%H:%M:00")
-            ATTRS = {'last_ran':self._last_run, 'time': self._time}
-            setattr(self, '_state_attributes', ATTRS)
 
             if self._stop == True:
                 break
 
-            DATA = {ATTR_ENTITY_ID: z_zone}
-            await self.hass.services.async_call(CONST_SWITCH,
-                                                SERVICE_TURN_ON,
-                                                DATA)
+            z_water = int(float(self.hass.states.get(z_water_v).state))
 
-            """ wait until the zone stops """
-            step = 1
-            await asyncio.sleep(step)
-            switch_state = self.hass.states.get(z_zone)
-            while switch_state.state == 'on':
-                await asyncio.sleep(step)
-                switch_state = self.hass.states.get(z_zone)
+            z_wait = 0
+            if z_wait_v is not None:
+                z_wait = int(float(self.hass.states.get(z_wait_v).state))
+
+            z_repeat = 1
+            if z_repeat_v is not None:
+                z_repeat = int(float(self.hass.states.get(z_repeat_v).state))
+                if z_repeat == 0:
+                    z_repeat = 1
+
+            _LOGGER.debug('Start water:%s, wait:%s, repeat:%s',z_water,z_wait,z_repeat)
+
+            self._runtime = (((z_water + z_wait) * z_repeat) - z_wait) * 60
+            """Update last run date/time attribute """
+            now            = dt_util.utcnow()
+            time_date      = dt_util.start_of_local_day(dt_util.as_local(now))
+            self._last_run = dt_util.as_local(time_date).date().isoformat()
+            ATTRS = {'last_ran': self._last_run, ATTR_REMAINING: self._runtime}
+            setattr(self, '_state_attributes', ATTRS)
+ 
+            """ run the watering cycle, water/wait/repeat """
+            DATA = {ATTR_ENTITY_ID: z_zone}
+            _LOGGER.debug('switch data:%s',DATA)
+            for i in range(z_repeat, 0, -1):
+                _LOGGER.debug('run switch repeat:%s',i)
                 if self._stop == True:
                     break
+                self._name = self._program_name + "-" + z_name
+                await self.hass.services.async_call(CONST_SWITCH,
+                                                    SERVICE_TURN_ON,
+                                                    DATA)
+
+                self._icon = z_icon
+                self.async_schedule_update_ha_state()
+
+                water = z_water * 60
+                for w in range(0,water, step):
+                    self._runtime = self._runtime - step
+                    ATTRS = {'last_ran': self._last_run, ATTR_REMAINING: self._runtime}
+                    setattr(self, '_state_attributes', ATTRS)
+                    self.async_schedule_update_ha_state()
+                    await asyncio.sleep(step)
+                    if self._stop == True:
+                        break
+
+                """ turn the switch entity off """
+                if z_wait > 0 and i > 1 and not self._stop:
+                    """ Eco mode is enabled """
+                    self._icon = self._wait_icon
+                    self.async_schedule_update_ha_state()
+                    await self.hass.services.async_call(CONST_SWITCH,
+                                                        SERVICE_TURN_OFF,
+                                                        DATA)
+
+                    wait = z_wait * 60
+                    for w in range(0,wait, step):
+                        self._runtime = self._runtime - step
+                        ATTRS = {'last_ran': self._last_run, ATTR_REMAINING: self._runtime}
+                        setattr(self, '_state_attributes', ATTRS)
+                        self.async_schedule_update_ha_state()
+                        await asyncio.sleep(step)
+                        if self._stop == True:
+                            break
+
+                if i <= 1 or self._stop:
+                    """ last/only cycle """
+                    if self.hass.states.is_state(z_zone,'on'):
+                        await self.hass.services.async_call(CONST_SWITCH,
+                                                            SERVICE_TURN_OFF,
+                                                            DATA)
+
         """ end of for zone loop """
 
-        _LOGGER.debug('out of zone loop')
         """Update last run date attribute """
         now            = dt_util.utcnow()
         time_date      = dt_util.start_of_local_day(dt_util.as_local(now))
         self._last_run = dt_util.as_local(time_date).date().isoformat()
-        self._time     = dt_util.as_local(dt_util.as_local(now)).strftime("%H:%M:00")
-        ATTRS = {'last_ran':self._last_run, 'time': self._time}
+        ATTRS          = {'last_ran':self._last_run, ATTR_REMAINING: 0}
         setattr(self, '_state_attributes', ATTRS)
 
-        self._state       = False
-        self._running     = False
-        self._run_program = None
-        self._stop        = False
+        self._state                 = False
+        self._running               = False
+        self._stop                  = False
         self._triggered_by_template = False
-        
+        self._icon                  = p_icon
+        self._name                  = self._program_name
+
         self.async_write_ha_state()
         _LOGGER.debug('program run complete')
 
@@ -431,9 +494,11 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
         for zone in self._zones:
             z_zone = zone.get(ATTR_ZONE)
             DATA = {ATTR_ENTITY_ID: z_zone}
-            await self.hass.services.async_call(CONST_SWITCH,
-                                                SERVICE_TURN_OFF,
-                                                DATA)
+            _LOGGER.debug('Zone switch %s: %s',z_zone, self.hass.states.get(z_zone))
+            if self.hass.states.is_state(z_zone,'on'):
+                await self.hass.services.async_call(CONST_SWITCH,
+                                                    SERVICE_TURN_OFF,
+                                                    DATA)
 
         self._state = False
         self.async_schedule_update_ha_state()

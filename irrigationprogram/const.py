@@ -29,4 +29,8 @@ CONST_ENTITY            = 'entity_id'
 CONST_SWITCH            = 'switch'
 
 
+DFLT_ICON_WATER         = 'mdi:water'
+DFLT_ICON_WAIT          = 'mdi:timer-sand'
+DFLT_ICON_OFF           = 'mdi:water-off'
 DFLT_ICON               = 'mdi:fountain'
+DFLT_ICON_RAIN          = 'mdi:weather-pouring'
