@@ -1,7 +1,7 @@
 # Irrigation Component V3
 The driver for this project is to provide an easy to configure user interface for the gardener of the house. The goal is that once the inital configuration is done all the features can be modified through lovelace cards. 
 
-The provided working test harness gives a sample of LoveLace configuration that uses the Entities card with condions and the Conditions Card to simplify the UI. It is self contained with dummy switches and rain sensor that can be used to become familiar with the capabilities of the component.
+The provided working test harness is self contained with dummy switches and rain sensor that can be used to become familiar with the capabilities of the component and a sample of LoveLace configuration that uses the Entities card with conditions and the Conditions Card to simplify the UI.
 
 ![irrigation|690x469,50%](irrigation.JPG) 
 Image 1: Show configuration enabled, displaying all attibutes availble for configuration
