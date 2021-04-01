@@ -88,6 +88,13 @@ automation:
         value: "{{ value template calculation }}"
 ```
 
+### Run Days and Run Frequency
+Run Days and Run frequency allows the definition of when the program to be controlled. Only one value can be provided in the program configuration.
+
+* *Run Days* supports water restrictions impose in Australia alowing watering to occur on specific days only
+* *Run Frequncy* allows the water to occur at a specified frequency, for example, every 3 days.
+
+
 ### ECO feature
 The ECO feature allows multiple small watering cycles to be configure for a zone in the program to minimise run off and wastage. Setting the optional configuration of the Wait, Repeat attributes of a zone will enable the feature. 
 
