@@ -2,11 +2,11 @@
 The driver for this project is to provide an easy to configure user interface for the gardener of the house. The goal is that once the inital configuration is done all the features can be modified through lovelace cards. To further simplify things there are conditions in the Lovelace example to hide the configuration items.
 
 ![irrigation|690x469,50%](irrigation.JPG) 
-With Show configuration enabled
+Image 1: With Show configuration enabled
 ![irrigation2|690x469,50%](irrigation2.JPG)
-With Show configuration disabled
+Image 2: With Show configuration disabled
 ![irrigation2|690x469,50%](irrigation3.JPG)
-While a program is running
+Image 3: While a program is running
 
 All the inputs of the new platforms are Home Assistant entities for example the start time is provided via a input_datetime entity. The information is evaluated to trigger the irrigation action according to the inputs provided.
 
