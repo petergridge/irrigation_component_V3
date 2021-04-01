@@ -42,7 +42,6 @@ from .const import (
 from homeassistant.const import (
     EVENT_HOMEASSISTANT_START,
     ATTR_ENTITY_ID,
-    ATTR_FRIENDLY_NAME,
     CONF_SWITCHES,
     CONF_UNIQUE_ID,
     CONF_NAME,
@@ -325,7 +324,6 @@ class IrrigationProgram(SwitchEntity):
         for zone in self._zones:
             z_rain_sen_v  = zone.get(ATTR_RAIN_SENSOR)
             z_ignore_v    = zone.get(ATTR_IGNORE_RAIN_SENSOR)
-            z_ignore_bool = zone.get(ATTR_IGNORE_RAIN_BOOL, False)
             z_zone        = zone.get(ATTR_ZONE)
             z_water_v     = zone.get(ATTR_WATER)
             z_water_adj_v = zone.get(ATTR_WATER_ADJUST)
@@ -333,6 +331,7 @@ class IrrigationProgram(SwitchEntity):
             z_repeat_v    = zone.get(ATTR_REPEAT)
             z_icon        = zone.get(ATTR_ICON)
             z_name        = zone.get(CONF_NAME)
+            z_ignore_bool = False
 
             if  z_ignore_v is not None and self.hass.states.async_available(z_ignore_v):
                 _LOGGER.error('%s not found',z_ignore_v)
@@ -346,7 +345,6 @@ class IrrigationProgram(SwitchEntity):
             if  z_rain_sen_v is not None and self.hass.states.async_available(z_rain_sen_v):
                 _LOGGER.error('%s not found',z_rain_sen_v)
                 continue
-
             if  z_wait_v is not None and self.hass.states.async_available(z_wait_v):
                 _LOGGER.error('%s not found',z_wait_v)
             if  z_repeat_v is not None and self.hass.states.async_available(z_repeat_v):
@@ -389,7 +387,6 @@ class IrrigationProgram(SwitchEntity):
                         await asyncio.sleep(1)
                         continue
 
-
             if self._stop == True:
                 break
 
@@ -397,9 +394,13 @@ class IrrigationProgram(SwitchEntity):
             z_water_adj = 1
             if z_water_adj_v is not None:
                 z_water_adj = float(self.hass.states.get(z_water_adj_v).state)
+                _LOGGER.debug('watering adjustment factor is %s', z_water_adj)
 
             z_water = math.ceil(int(float(self.hass.states.get(z_water_v).state)) * float(z_water_adj))
-
+            if z_water == 0:
+                _LOGGER.debug('watering time has been adjusted to 0 do not run zone %s',z_zone)
+                continue
+                
             z_wait = 0
             if z_wait_v is not None:
                 z_wait = int(float(self.hass.states.get(z_wait_v).state))
@@ -425,9 +426,10 @@ class IrrigationProgram(SwitchEntity):
                 if self._stop == True:
                     break
                 self._name = self._program_name + "-" + z_name
-                await self.hass.services.async_call(CONST_SWITCH,
-                                                    SERVICE_TURN_ON,
-                                                    DATA)
+                if self.hass.states.is_state(z_zone,'off'):
+                    await self.hass.services.async_call(CONST_SWITCH,
+                                                        SERVICE_TURN_ON,
+                                                        DATA)
 
                 self._icon = z_icon
                 self.async_schedule_update_ha_state()
@@ -447,9 +449,10 @@ class IrrigationProgram(SwitchEntity):
                     """ Eco mode is enabled """
                     self._icon = self._wait_icon
                     self.async_schedule_update_ha_state()
-                    await self.hass.services.async_call(CONST_SWITCH,
-                                                        SERVICE_TURN_OFF,
-                                                        DATA)
+                    if self.hass.states.is_state(z_zone,'on'):
+                        await self.hass.services.async_call(CONST_SWITCH,
+                                                            SERVICE_TURN_OFF,
+                                                            DATA)
 
                     wait = z_wait * 60
                     for w in range(0,wait, step):
