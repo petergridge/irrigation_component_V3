@@ -65,7 +65,7 @@ The rain sensor can be optionally defined in each zone. You can:
 * Configure the ability to ignore the rain sensor
 
 ### Watering Adjuster feature
-As an alternative to the rain sensor you can also use the watering adjustment. With this feature the integrator is responsible to provide the value using a input_number component.
+As an alternative to the rain sensor you can also use the watering adjustment. With this feature the integrator is responsible to provide the value using a input_number component. I imagine that this would be based on weather data or a moisture sensor.
 
 Setting *water_adjustment* attribute allows a factor to be applied to the watering time.
 
