@@ -5,8 +5,10 @@ The provided working test harness gives a sample of LoveLace configuration that 
 
 ![irrigation|690x469,50%](irrigation.JPG) 
 Image 1: Show configuration enabled, displaying all attibutes availble for configuration
+
 ![irrigation2|690x469,50%](irrigation2.JPG)
 Image 2: Show configuration disabled, displaying only minimal sensor information
+
 ![irrigation2|690x469,50%](irrigation3.JPG)
 Image 3: While a program is running showing the remaining run time for the Pot Plants zone
 
