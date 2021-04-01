@@ -18,7 +18,7 @@ Watering can occur in an Eco mode where a water/wait/repeat cycle is run to mini
 
 The rain sensor is implemented as a binary_sensor, this allows practically any combination of sensors to suspend the irrigation. 
 
-Additionally being implemented as a switch you can start a program manually or using an automation.
+Implemented as a switch you can start a program manually or using an automation.
 
 Only one program can run at a time to prevent multiple solenoids being activated. If program start times result in an overlap the running program will be stopped.
 
