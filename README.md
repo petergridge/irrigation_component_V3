@@ -188,13 +188,6 @@ The ECO feature allows multiple small watering cycles to be configure for a zone
 irrigationprogram.stop_programs:
     description: Stop any running program.
 ```
-## ESPHOME
-
-An example ESPHOME configuration file is included in the repository this example utilises:
-* ESP8266 
-* PCF8575 - I2C IO expander for up to 16 solenoids
-* BME280 - temperature, pressure and humidity sensor
-* Moisture Sensor - analogue/digital moisture sensor
 
 ## REVISION HISTORY
 
