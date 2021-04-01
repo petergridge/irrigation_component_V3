@@ -199,7 +199,7 @@ irrigationprogram.stop_programs:
 ## REVISION HISTORY
 
 ### 3.0.0
-* BREAKING CHANGE: re-factor to deprecate the irrigationzone component
+* BREAKING CHANGE: deprecate the irrigationzone component
 * Move zone details into the irrigationprogram component - feature request
 * Move rain sensor to the zone definition - feature request 
 * Move ignore rain sensor into the zone definition - feature request
