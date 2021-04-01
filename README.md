@@ -1,7 +1,7 @@
 # Irrigation Component V3
 The driver for this project is to provide an easy to configure user interface for the gardener of the house. The goal is that once the inital configuration is done all the features can be modified through lovelace cards. 
 
-The provided working test harness provides a sample of LoveLace configuration that uses the Entities card with condions and the Conditions Card to simplify the UI.
+The provided working test harness gives a sample of LoveLace configuration that uses the Entities card with condions and the Conditions Card to simplify the UI. It is self contained with dummy switches and rain sensor that can be used to become familiar with the capabilities of the component.
 
 ![irrigation|690x469,50%](irrigation.JPG) 
 Image 1: With Show configuration enabled, showing all attibutes availble for configuration
@@ -14,11 +14,11 @@ All the inputs of the new platforms are Home Assistant entities for example the 
 
 Watering can occur in an Eco mode where a water/wait/repeat cycle is run to minimise run off by letting water soak as a by using several short watering cycles. The wait and repeat configuration is optional if you only want to water for a single lengthy period of time.
 
-The rain sensor is implemented as a binary_sensor, this allows a practically any combination of sensors to suspend the irrigation. 
+The rain sensor is implemented as a binary_sensor, this allows practically any combination of sensors to suspend the irrigation. 
 
 Additionally being implemented as a switch you can start a program manually or using an automation.
 
-Only one program or zone can run at a time to prevent multiple solenoids being activated. If program start times result in an overlap the running program will be stopped.
+Only one program can run at a time to prevent multiple solenoids being activated. If program start times result in an overlap the running program will be stopped.
 
 Manually starting a program by turning the switch on will not evaluate the rain sensor, as there is an assumption that there is an intent to run the program.
 
