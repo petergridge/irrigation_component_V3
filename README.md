@@ -72,7 +72,7 @@ Setting *water_adjustment* attribute allows a factor to be applied to the wateri
 * If the factor is 0 no watering will occur
 * If the factor is 0.5 watering will run for only half the configured watering time. Wait and repeat attributes are unaffected.
 
-The following automation is an example of how the input_number could be maintained
+The following automation is an example of how the input_number.adjust_run_time could be maintained
 ```yaml
 automation:
 - id: '1553507967550'
