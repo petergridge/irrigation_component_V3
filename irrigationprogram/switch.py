@@ -2,18 +2,13 @@
 import logging
 import asyncio
 import voluptuous as vol
-from datetime import (datetime) #, timedelta
+from datetime import timedelta
+import math
 import homeassistant.util.dt as dt_util
-
 from homeassistant.core import callback
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.entity import async_generate_entity_id
-from homeassistant.exceptions import TemplateError
 from homeassistant.helpers.event import async_track_state_change
-
-from homeassistant.helpers.restore_state import (
-    RestoreEntity,
-)
 
 from homeassistant.components.switch import (
     ENTITY_ID_FORMAT,
@@ -30,11 +25,11 @@ from .const import (
     ATTR_RAIN_SENSOR,
     ATTR_IGNORE_RAIN_BOOL,
     CONST_SWITCH,
-    ATTR_NAME,
     ATTR_IGNORE_RAIN_SENSOR,
     ATTR_ZONES,
     ATTR_ZONE,
     ATTR_WATER,
+    ATTR_WATER_ADJUST,
     ATTR_WAIT,
     ATTR_REPEAT,
     ATTR_REMAINING,
@@ -50,6 +45,7 @@ from homeassistant.const import (
     ATTR_FRIENDLY_NAME,
     CONF_SWITCHES,
     CONF_UNIQUE_ID,
+    CONF_NAME,
     SERVICE_TURN_OFF,
     SERVICE_TURN_ON,
     ATTR_ICON,
@@ -60,19 +56,19 @@ SWITCH_SCHEMA = vol.All(
     cv.deprecated(ATTR_ENTITY_ID),
     vol.Schema(
         {
-        vol.Optional(ATTR_FRIENDLY_NAME): cv.string,
+        vol.Optional(CONF_NAME): cv.string,
         vol.Required(ATTR_START): cv.entity_domain('input_datetime'),
         vol.Exclusive(ATTR_RUN_FREQ,"FRQP"): cv.entity_domain('input_select'),
         vol.Exclusive(ATTR_RUN_DAYS,"FRQP"): cv.entity_domain('input_select'),
         vol.Optional(ATTR_IRRIGATION_ON): cv.entity_domain('input_boolean'),
-        vol.Optional(ATTR_RAIN_SENSOR): cv.entity_domain('binary_sensor'),
         vol.Optional(ATTR_ICON,default=DFLT_ICON): cv.icon,
         vol.Required(ATTR_ZONES): [{
             vol.Required(ATTR_ZONE): cv.entity_domain(CONST_SWITCH),
-            vol.Optional(ATTR_FRIENDLY_NAME): cv.string,
-            vol.Exclusive(ATTR_IGNORE_RAIN_SENSOR,"RS"): cv.entity_domain('input_boolean'),
-            vol.Exclusive(ATTR_IGNORE_RAIN_BOOL,"RS"): cv.boolean,
+            vol.Required(CONF_NAME): cv.string,
+            vol.Optional(ATTR_RAIN_SENSOR): cv.entity_domain('binary_sensor'),
+            vol.Optional(ATTR_IGNORE_RAIN_SENSOR): cv.entity_domain('input_boolean'),
             vol.Required(ATTR_WATER): cv.entity_domain('input_number'),
+            vol.Optional(ATTR_WATER_ADJUST): cv.entity_domain('input_number'),
             vol.Optional(ATTR_WAIT): cv.entity_domain('input_number'),
             vol.Optional(ATTR_REPEAT): cv.entity_domain('input_number'),
             vol.Optional(ATTR_ICON,default=DFLT_ICON): cv.icon,
@@ -94,12 +90,11 @@ async def _async_create_entities(hass, config):
     switches = []
 
     for device, device_config in config[CONF_SWITCHES].items():
-        friendly_name           = device_config.get(ATTR_FRIENDLY_NAME, device)
+        friendly_name           = device_config.get(CONF_NAME, device)
         start_time              = device_config.get(ATTR_START)
         run_freq                = device_config.get(ATTR_RUN_FREQ)
         run_days                = device_config.get(ATTR_RUN_DAYS)
         irrigation_on           = device_config.get(ATTR_IRRIGATION_ON)
-        rain_sensor             = device_config.get(ATTR_RAIN_SENSOR)
         icon                    = device_config.get(ATTR_ICON)
         zones                   = device_config.get(ATTR_ZONES)
         unique_id               = device_config.get(CONF_UNIQUE_ID)
@@ -113,7 +108,6 @@ async def _async_create_entities(hass, config):
                 run_freq,
                 run_days,
                 irrigation_on,
-                rain_sensor,
                 icon,
                 DFLT_ICON_WAIT,
                 DFLT_ICON_RAIN,
@@ -130,7 +124,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     async_add_entities(await _async_create_entities(hass, config))
 
 
-class IrrigationProgram(SwitchEntity, RestoreEntity):
+class IrrigationProgram(SwitchEntity):
     """Representation of an Irrigation program."""
     def __init__(
         self,
@@ -141,7 +135,6 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
         run_freq,
         run_days,
         irrigation_on,
-        rain_sensor,
         icon,
         wait_icon,
         rain_icon,
@@ -154,13 +147,12 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
         )
 
         """Initialize a Irrigation program."""
-        self._name               = friendly_name
-        self._program_name       = friendly_name
+        self._name               = str(friendly_name).title()
+        self._program_name       = str(friendly_name).title()
         self._start_time         = start_time
         self._run_freq           = run_freq
         self._run_days           = run_days
         self._irrigation_on      = irrigation_on
-        self._rain_sensor        = rain_sensor
         self._icon               = icon
         self._wait_icon          = wait_icon
         self._rain_icon          = rain_icon
@@ -172,7 +164,7 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
         self._device_id          = device_id
         self._running            = False
         self._last_run           = None
-        self._triggered_by_template = False
+        self._triggered_manually = True
         self._template           = None
 
         """ Validate and Build a template from the attributes provided """
@@ -224,13 +216,12 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
 
     async def async_added_to_hass(self):
 
-        state     = await self.async_get_last_state()
-        now       = dt_util.utcnow()
-        time_date = dt_util.start_of_local_day(dt_util.as_local(now))
         try:
             self._last_run = state.attributes.get('last_ran')
         except:
-            """ default to today for new programs """
+            """ default to 10 days ago for new programs """
+            now       = dt_util.utcnow() - timedelta(days=10)
+            time_date = dt_util.start_of_local_day(dt_util.as_local(now))
             if self._last_run is None:
                 self._last_run = dt_util.as_local(time_date).date().isoformat()
 
@@ -295,7 +286,7 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
         """Update the state from the template."""
         if self._running == False:
             if self._template.async_render():
-                self._triggered_by_template = True
+                self._triggered_manually = False
                 loop = asyncio.get_event_loop()
                 loop.create_task(self.async_turn_on())
 
@@ -332,48 +323,56 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
 
         """ Iterate through all the defined zones """
         for zone in self._zones:
-            z_ignore      = zone.get(ATTR_IGNORE_RAIN_SENSOR)
+            z_rain_sen_v  = zone.get(ATTR_RAIN_SENSOR)
+            z_ignore_v    = zone.get(ATTR_IGNORE_RAIN_SENSOR)
             z_ignore_bool = zone.get(ATTR_IGNORE_RAIN_BOOL, False)
             z_zone        = zone.get(ATTR_ZONE)
             z_water_v     = zone.get(ATTR_WATER)
+            z_water_adj_v = zone.get(ATTR_WATER_ADJUST)
             z_wait_v      = zone.get(ATTR_WAIT)
             z_repeat_v    = zone.get(ATTR_REPEAT)
             z_icon        = zone.get(ATTR_ICON)
-            z_name        = zone.get(ATTR_FRIENDLY_NAME)
+            z_name        = zone.get(CONF_NAME)
 
-            if  z_ignore is not None and self.hass.states.async_available(z_ignore):
-                _LOGGER.error('%s not found',z_ignore)
+            if  z_ignore_v is not None and self.hass.states.async_available(z_ignore_v):
+                _LOGGER.error('%s not found',z_ignore_v)
                 continue
             if  z_water_v is not None and self.hass.states.async_available(z_water_v):
                 _LOGGER.error('%s not found',z_water_v)
                 continue
+            if  z_water_adj_v is not None and self.hass.states.async_available(z_water_adj_v):
+                _LOGGER.error('%s not found',z_water_adj_v)
+                continue
+            if  z_rain_sen_v is not None and self.hass.states.async_available(z_rain_sen_v):
+                _LOGGER.error('%s not found',z_rain_sen_v)
+                continue
+
             if  z_wait_v is not None and self.hass.states.async_available(z_wait_v):
                 _LOGGER.error('%s not found',z_wait_v)
             if  z_repeat_v is not None and self.hass.states.async_available(z_repeat_v):
                 _LOGGER.error('%s not found',z_repeat_v)
-                continue
 
             _LOGGER.debug('------------ on execution zone: %s--------', z_zone)
             raining = False
 
-            if self._triggered_by_template == False:
+            if self._triggered_manually == True:
                 _LOGGER.debug('------------Irrigation Manually triggered, rain sensor not evaluated--------')
             else:
                 """ assess the rain sensor """
-                if self._rain_sensor is not None:
-                    _LOGGER.debug('rain sensor: %s, check your configuration',self.hass.states.get(self._rain_sensor))
-                    if  self.hass.states.get(self._rain_sensor) == None:
-                        _LOGGER.warning('rain sensor: %s not found',self._rain_sensor)
+                if z_rain_sen_v is not None:
+                    _LOGGER.debug('rain sensor: %s',self.hass.states.get(z_rain_sen_v))
+                    if  self.hass.states.get(z_rain_sen_v) == None:
+                        _LOGGER.warning('rain sensor: %s not found, check your configuration',z_rain_sen_v)
                     else:
-                        raining = self.hass.states.is_state(self._rain_sensor,'on')
-                        _LOGGER.debug('raining:%s, check your configuration',raining)
+                        raining = self.hass.states.is_state(z_rain_sen_v,'on')
+                        _LOGGER.debug('raining:%s',raining)
                 """ assess the ignore rain sensor """
-                if  z_ignore is not None:
-                    _LOGGER.debug('Ignore rain sensor: %s',self.hass.states.get(z_ignore))
-                    if  self.hass.states.get(z_ignore) == None:
-                        _LOGGER.warning('Ignore rain sensor: %s not found, check your configuration',z_ignore)
+                if  z_ignore_v is not None:
+                    _LOGGER.debug('Ignore rain sensor: %s',self.hass.states.get(z_ignore_v))
+                    if  self.hass.states.get(z_ignore_v) == None:
+                        _LOGGER.warning('Ignore rain sensor: %s not found, check your configuration',z_ignore_v)
                     else:
-                         z_ignore_bool = self.hass.states.is_state(z_ignore,'on')
+                         z_ignore_bool = self.hass.states.is_state(z_ignore_v,'on')
                 """ process rain sensor """
                 if not z_ignore_bool: #ignore rain sensor
                     _LOGGER.debug('Do not ignore the rain sensor')
@@ -394,7 +393,12 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
             if self._stop == True:
                 break
 
-            z_water = int(float(self.hass.states.get(z_water_v).state))
+            """ factor to adjust watering time """
+            z_water_adj = 1
+            if z_water_adj_v is not None:
+                z_water_adj = float(self.hass.states.get(z_water_adj_v).state)
+
+            z_water = math.ceil(int(float(self.hass.states.get(z_water_v).state)) * float(z_water_adj))
 
             z_wait = 0
             if z_wait_v is not None:
@@ -406,13 +410,10 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
                 if z_repeat == 0:
                     z_repeat = 1
 
-            _LOGGER.debug('Start water:%s, wait:%s, repeat:%s',z_water,z_wait,z_repeat)
+            _LOGGER.debug('Start water:%s, water_adj:%s wait:%s, repeat:%s', z_water, z_water_adj, z_wait, z_repeat)
 
             self._runtime = (((z_water + z_wait) * z_repeat) - z_wait) * 60
-            """Update last run date/time attribute """
-            now            = dt_util.utcnow()
-            time_date      = dt_util.start_of_local_day(dt_util.as_local(now))
-            self._last_run = dt_util.as_local(time_date).date().isoformat()
+            """Set time remaining attribute """
             ATTRS = {'last_ran': self._last_run, ATTR_REMAINING: self._runtime}
             setattr(self, '_state_attributes', ATTRS)
  
@@ -470,16 +471,18 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
         """ end of for zone loop """
 
         """Update last run date attribute """
-        now            = dt_util.utcnow()
-        time_date      = dt_util.start_of_local_day(dt_util.as_local(now))
-        self._last_run = dt_util.as_local(time_date).date().isoformat()
-        ATTRS          = {'last_ran':self._last_run, ATTR_REMAINING: 0}
+        if not self._triggered_manually:
+            now            = dt_util.utcnow()
+            time_date      = dt_util.start_of_local_day(dt_util.as_local(now))
+            self._last_run = dt_util.as_local(time_date).date().isoformat()
+
+        ATTRS = {'last_ran':self._last_run, ATTR_REMAINING: 0}
         setattr(self, '_state_attributes', ATTRS)
 
         self._state                 = False
         self._running               = False
         self._stop                  = False
-        self._triggered_by_template = False
+        self._triggered_manually    = True
         self._icon                  = p_icon
         self._name                  = self._program_name
 
