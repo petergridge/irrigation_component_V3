@@ -1,0 +1,20 @@
+#Card 3
+type: conditional
+conditions:
+  - entity: input_boolean.irrigation_config
+    state: 'on'
+card:
+  type: entities
+  entities:
+    - type: section
+      label: Lawn
+    - entity: input_number.irrigation_lawn_run
+    - type: section
+      label: Vege Patch
+    - entity: input_number.irrigation_vege_run
+    - type: section
+      label: Pot Plants
+    - entity: input_number.irrigation_pot_plants_run
+    - entity: input_number.irrigation_pot_plants_wait
+    - entity: input_number.irrigation_pot_plants_repeat
+  title: Zone Attributes

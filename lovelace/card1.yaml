@@ -1,0 +1,26 @@
+#Card 1
+type: entities
+entities:
+  - entity: input_boolean.irrigation_config
+  - entity: binary_sensor.raining
+  - conditions:
+      - entity: input_boolean.irrigation_config
+        state: 'on'
+    row:
+      entity: input_boolean.dummy_rain_sensor
+    type: conditional
+  - conditions:
+      - entity: input_boolean.irrigation_config
+        state: 'on'
+    row:
+      entity: input_boolean.irrigation_on
+    type: conditional
+  - conditions:
+      - entity: input_boolean.irrigation_config
+        state: 'on'
+    row:
+      entity: input_boolean.irrigation_ignore_rain_sensor
+    type: conditional
+show_header_toggle: false
+title: Irrigation
+state_color: true

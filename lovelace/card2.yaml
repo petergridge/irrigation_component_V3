@@ -1,0 +1,75 @@
+#card 2
+type: entities
+entities:
+  - type: section
+    label: Morning - run days example
+  - entity: switch.morning
+  - conditions:
+      - entity: switch.morning
+        state: 'on'
+    row:
+      type: attribute
+      entity: switch.morning
+      attribute: remaining
+    type: conditional
+  - conditions:
+      - entity: input_boolean.irrigation_config
+        state: 'on'
+    row:
+      entity: input_datetime.irrigation_morning_start_time
+    type: conditional
+  - conditions:
+      - entity: input_boolean.irrigation_config
+        state: 'on'
+    row:
+      entity: input_select.irrigation_run_days
+    type: conditional
+  - type: section
+    label: Afternoon - run time adjuster example
+  - entity: switch.afternoon
+  - conditions:
+      - entity: switch.afternoon
+        state: 'on'
+    row:
+      type: attribute
+      entity: switch.afternoon
+      attribute: remaining
+    type: conditional
+  - conditions:
+      - entity: input_boolean.irrigation_config
+        state: 'on'
+    row:
+      entity: input_datetime.irrigation_afternoon_start_time
+    type: conditional
+  - conditions:
+      - entity: input_boolean.irrigation_config
+        state: 'on'
+    row:
+      entity: input_number.irrigation_adjust_run
+    type: conditional
+  - type: section
+    label: Night - run frequency example
+  - entity: switch.night
+  - conditions:
+      - entity: switch.night
+        state: 'on'
+    row:
+      type: attribute
+      entity: switch.night
+      attribute: remaining
+    type: conditional
+  - conditions:
+      - entity: input_boolean.irrigation_config
+        state: 'on'
+    row:
+      entity: input_datetime.irrigation_night_start_time
+    type: conditional
+  - conditions:
+      - entity: input_boolean.irrigation_config
+        state: 'on'
+    row:
+      entity: input_select.irrigation_freq
+    type: conditional
+title: Sample configurations
+show_header_toggle: false
+state_color: true

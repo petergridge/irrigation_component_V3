@@ -1,0 +1,14 @@
+#Card 4
+type: conditional
+conditions:
+  - entity: input_boolean.irrigation_config
+    state: 'on'
+card:
+  type: entities
+  entities:
+    - entity: switch.dummy_1
+    - entity: switch.dummy_2
+    - entity: switch.dummy_3
+  title: Solenoids
+  show_header_toggle: false
+  state_color: true
