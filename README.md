@@ -4,13 +4,13 @@ The driver for this project is to provide an easy to configure user interface fo
 The provided working test harness gives a sample of LoveLace configuration that uses the Entities card with condions and the Conditions Card to simplify the UI. It is self contained with dummy switches and rain sensor that can be used to become familiar with the capabilities of the component.
 
 ![irrigation|690x469,50%](irrigation.JPG) 
-Image 1: With Show configuration enabled, showing all attibutes availble for configuration
+Image 1: Show configuration enabled, displaying all attibutes availble for configuration
 ![irrigation2|690x469,50%](irrigation2.JPG)
-Image 2: With Show configuration disabled, showing only minimal sensor information
+Image 2: Show configuration disabled, displaying only minimal sensor information
 ![irrigation2|690x469,50%](irrigation3.JPG)
 Image 3: While a program is running showing the remaining run time for the Pot Plants zone
 
-All the inputs of the new platforms are Home Assistant entities for example the start time is provided via a input_datetime entity. The information is evaluated to trigger the irrigation action according to the inputs provided.
+All the inputs of the platform are Home Assistant entities for example the start time is provided via a input_datetime entity. The information is evaluated to trigger the irrigation action according to the inputs provided.
 
 Watering can occur in an Eco mode where a water/wait/repeat cycle is run to minimise run off by letting water soak as a by using several short watering cycles. The wait and repeat configuration is optional if you only want to water for a single lengthy period of time.
 
@@ -27,9 +27,8 @@ Manually starting a program by turning the switch on will not evaluate the rain 
 ### To create a working sample
 * Copy the irrigationprogram folder to the ‘config/custom components/’ directory 
 * Copy the 'irrigation.yaml' file to the packages directory or into configuration.yaml. Sample configuration
-* Copy the 'dummy_switches.yaml' file to the packages directory of into configuration yaml. This will provide dummy implementation of switches to represent solenoids.
 * Restart Home Assistant
-* In Lovelace create a 'manual' card and copy the contents of the 'lovelace.yaml' file
+* For each of the 'card.yaml' files found in the lovelace directory, add a manual card and copy the yaml into card
 
 ### Important
 * Make sure that all of the objects you reference i.e. input_boolean, switch etc are defined or you will get errors when the irrigationprogram is triggered. Check the log for errors.
@@ -54,11 +53,11 @@ logger:
 ```
 
 ### Rain Sensor feature
-If a rain sensor is not defined the zone will always run.
+If a rain sensor is not defined the zone will always run at the nominated start time.
 
 If the irrigation program is run manually the rain sensor value is ignored and all zones will run.
 
-The rain sensor is defined in each zone. You can:
+The rain sensor can be optionally defined in each zone. You can:
 * Define the same sensor for each zone 
 * Have a different sensor for different areas
 * Configure the ability to ignore the rain sensor
@@ -69,10 +68,10 @@ As an alternative to the rain sensor you can also use the watering adjustment. W
 Setting *water_adjustment* attribute allows a factor to be applied to the watering time.
 
 * If the factor is 0 no watering will occur
-* If the factor is 0.5 watering will run for only half the configured watering time.
+* If the factor is 0.5 watering will run for only half the configured watering time. Wait and repeat attributes are unaffected.
 
 ### ECO feature
-The ECO feature allows multiple small watering cycles to be used to minimise run off and wastage. Setting the optional configuration of the Wait, Repeat attributes of a zone will enable the feature. 
+The ECO feature allows multiple small watering cycles to be configure for a zone in the program to minimise run off and wastage. Setting the optional configuration of the Wait, Repeat attributes of a zone will enable the feature. 
 
 * *wait* sets the length of time to wait between watering cycles
 * *repeat* defines the number of watering cycles to run
@@ -85,7 +84,7 @@ The ECO feature allows multiple small watering cycles to be used to minimise run
   - platform: irrigationprogram
     switches: 
       morning:
-        friendly_name: Morning
+        name: Morning
         irrigation_on: input_boolean.irrigation_on
         start_time: input_datetime.irrigation_morning_start_time
         run_freq: input_select.irrigation_freq
@@ -94,7 +93,7 @@ The ECO feature allows multiple small watering cycles to be used to minimise run
         # Adjust watering time used 
         # Watering time adjusted to water * adjust_watering_time
           - zone: switch.irrigation_solenoid_01
-            friendly_name: Pot Plants
+            name: Pot Plants
             water: input_number.irrigation_pot_plants_run
             water_adjustment: input_number.adjust_run_time
             wait: input_number.irrigation_pot_plants_wait
@@ -102,36 +101,36 @@ The ECO feature allows multiple small watering cycles to be used to minimise run
             icon_off: 'mdi:flower'
         # No rain sensor defined, will always water to the schedule
           - zone: switch.irrigation_solenoid_03
-            friendly_name: Greenhouse
+            name: Greenhouse
             water: input_number.irrigation_greenhouse_run
             wait: input_number.irrigation_greenhouse_wait
             repeat: input_number.irrigation_greenhouse_repeat
             icon_off: 'mdi:flower'
         # Rain sensor used, watering time only
           - zone: switch.irrigation_solenoid_02
-            friendly_name: Front Lawn
+            name: Front Lawn
             water: input_number.irrigation_lawn_run
             rain_sensor: binary_sensor.irrigation_rain_sensor
             ignore_rain_sensor: switch.ignore_rain_sensor
 
     # minimal configuration, will run everyday at the time specified
       afternoon:
-        friendly_name: Afternoon
+        name: Afternoon
         start_time: input_datetime.irrigation_afternoon_start_time
         zones:
           - zone: switch.irrigation_solenoid_01
-            friendly_name: Pot Plants
+            name: Pot Plants
             water: input_number.irrigation_pot_plants_run
           - zone: switch.irrigation_solenoid_02
-            friendly_name: Front Lawn
+            name: Front Lawn
             water: input_number.irrigation_lawn_run
 ```
 ## CONFIGURATION VARIABLES
 
 ## program
 *(string)(Required)* the switch entity.
->#### friendly_name
-*(string)(Required)* display name for the irrigation program switch.
+>#### name
+*(string)(Optional)* display name for the irrigation program switch.
 >#### start_time
 *(input_datetime)(Required)* the local time for the program to start.
 >#### run_freq (mutually exclusive with run_days)
@@ -148,7 +147,7 @@ The ECO feature allows multiple small watering cycles to be used to minimise run
 *(list)(Required)* The list of zones to water.
 >>#### zone
 *(entity)(Required)* This is the switch that represents the solenoid to be triggered.
->>#### friendly_name
+>>#### name
 *(string)(Required)* This is the name displayed when the zone is active.
 >>#### rain_sensor
 *(binary_sensor)(Optional)* A binary sensor - True or On will prevent the irrigation starting. e.g. rain sensor, greenhouse moisture sensor or template sensor that checks the weather
@@ -156,14 +155,12 @@ The ECO feature allows multiple small watering cycles to be used to minimise run
 *(input_boolean)(Optional)* Attribute to allow the zone to run regardless of the state of the rain sensor. Useful for a greenhouse zone that never gets rain.
 >>#### water
 *(input_number)(Required)* This it the period that the zone will turn the switch_entity on for.
->>#### adjust_watering_time
+>>#### water_adjustment
 *(input_number)(Optional)* This is a factor to apply to the watering time that can be used as an alternative to using a rain sensor. The watering time will be multiplied by this factor to adjust the run time of the zone.
 >>#### wait
 *(input_number)(Optional)* This provides for an Eco capability implementing a cycle of water/wait/repeat to allow water to soak into the soil.
 >>#### repeat
 *(input_number)(Optional)* This is the number of cycles to run water/wait/repeat.
->>#### switch_entity
-*(switch)(Required)* The switch to operate when the zone is triggered.
 >>#### icon_on
 *(icon)(Optional)* This will replace the default mdi:water icon shown when the zone is running.
 
