@@ -72,6 +72,22 @@ Setting *water_adjustment* attribute allows a factor to be applied to the wateri
 * If the factor is 0 no watering will occur
 * If the factor is 0.5 watering will run for only half the configured watering time. Wait and repeat attributes are unaffected.
 
+The following automation is an example of how the input_number could be maintained
+```yaml
+automation:
+- id: '1553507967550'
+  alias: rain adjuster
+  mode: restart
+  trigger:
+  - platform: time_pattern
+    minutes: "/1"
+  action:
+    - service: input_number.set_value
+      entity_id: input_number.rain_adjuster
+      data:
+        value: "{{ value template calculation }}"
+'''
+
 ### ECO feature
 The ECO feature allows multiple small watering cycles to be configure for a zone in the program to minimise run off and wastage. Setting the optional configuration of the Wait, Repeat attributes of a zone will enable the feature. 
 
