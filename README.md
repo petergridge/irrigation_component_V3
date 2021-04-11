@@ -198,6 +198,9 @@ irrigationprogram.stop_programs:
 
 ## REVISION HISTORY
 
+### 2.0.2
+* Update to fix bug in last run date attribute. Impacted Programs that run on the Frequency option.
+
 ### 3.0.0
 * BREAKING CHANGE: deprecate the irrigationzone component
 * Move zone details into the irrigationprogram component - feature request
