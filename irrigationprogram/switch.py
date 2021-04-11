@@ -10,6 +10,10 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.entity import async_generate_entity_id
 from homeassistant.helpers.event import async_track_state_change
 
+from homeassistant.helpers.restore_state import (
+    RestoreEntity,
+)
+
 from homeassistant.components.switch import (
     ENTITY_ID_FORMAT,
     PLATFORM_SCHEMA,
@@ -123,7 +127,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     async_add_entities(await _async_create_entities(hass, config))
 
 
-class IrrigationProgram(SwitchEntity):
+class IrrigationProgram(SwitchEntity, RestoreEntity):
     """Representation of an Irrigation program."""
     def __init__(
         self,
@@ -215,6 +219,7 @@ class IrrigationProgram(SwitchEntity):
 
     async def async_added_to_hass(self):
 
+        state     = await self.async_get_last_state()
         try:
             self._last_run = state.attributes.get('last_ran')
         except:
