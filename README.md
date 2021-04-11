@@ -198,7 +198,7 @@ irrigationprogram.stop_programs:
 
 ## REVISION HISTORY
 
-### 2.0.2
+### 3.0.2
 * Update to fix bug in last run date attribute. Impacted Programs that run on the Frequency option.
 
 ### 3.0.0
