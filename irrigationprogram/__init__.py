@@ -11,6 +11,10 @@ from homeassistant.const import (
     CONF_SWITCHES,
     SERVICE_TURN_OFF,
     ATTR_ENTITY_ID,
+    CONF_API_KEY,
+    CONF_LATITUDE,
+    CONF_LONGITUDE,
+    CONF_TIMEOUT
     )
 
 # Shortcut for the logger

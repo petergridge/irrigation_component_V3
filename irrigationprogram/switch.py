@@ -233,18 +233,17 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
 
         @callback
         def template_sensor_startup(event):
-            """Triggered when HASS has started"""
+            """Triggered when HASS has fully started"""
 
             """ Validate the referenced objects now that HASS has started"""
             if  self.hass.states.async_available('sensor.time'):
-                _LOGGER.error('%s :check your configuration, ' + \
-                                'if the entity has not been defined the irriagtion program will not behave as expected' \
+                _LOGGER.error('%s not defined check your configuration, ' + \
+                                'if sensor.time has not been defined the irriagtion program will not behave as expected' \
                                 ,'sensor.time')
 
             if  self.hass.states.async_available(self._start_time):
-                _LOGGER.warning('%s not found, check your configuration, ' + \
-                                'this may be due to the slow start of HomeAssistant, ' + \
-                                'if the entity has not been defined the irriagtion program will behave as expected' \
+                _LOGGER.error('%s not found, check your configuration, ' + \
+                                'if the entity has not been defined the irriagtion program will not run as expected' \
                                 ,self._start_time)
 
             if self._irrigation_on is not None:
@@ -259,15 +258,9 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
                 if  self.hass.states.async_available(self._run_freq):
                     _LOGGER.warning('%s not found, check your configuration',self._run_freq)
 
-            if  self.hass.states.async_available('sensor.time'):
-                _LOGGER.error('%s :check your configuration, ' + \
-                                'if the entity has not been defined the irriagtion program will not behave as expected' \
-                                ,'sensor.time')                
-
             """Update template on startup """
             async_track_state_change(
                 self.hass, 'sensor.time', template_check)
-
 
         self.hass.bus.async_listen_once(
             EVENT_HOMEASSISTANT_START, template_sensor_startup)
