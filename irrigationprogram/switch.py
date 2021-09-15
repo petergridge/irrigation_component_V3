@@ -233,7 +233,7 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
 
         @callback
         def template_sensor_startup(event):
-        """Triggered when HASS has started"""
+            """Triggered when HASS has started"""
 
             """ Validate the referenced objects now that HASS has started"""
             if  self.hass.states.async_available('sensor.time'):
