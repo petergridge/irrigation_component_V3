@@ -198,6 +198,9 @@ irrigationprogram.stop_programs:
 
 ## REVISION HISTORY
 
+### 3.0.3
+* Update to validate the referenced objects after HASS has started.
+
 ### 3.0.2
 * Update to fix bug in last run date attribute. Impacted Programs that run on the Frequency option.
 
