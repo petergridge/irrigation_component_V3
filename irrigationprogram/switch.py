@@ -40,7 +40,7 @@ from .const import (
     DFLT_ICON_WAIT,
     DFLT_ICON_RAIN,
     DFLT_ICON,
-    
+    ATTR_LAST_RAN,
 )
 
 from homeassistant.const import (
@@ -171,36 +171,25 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
         self._template           = None
 
         """ Validate and Build a template from the attributes provided """
-        if  hass.states.async_available(self._start_time):
-            _LOGGER.error('%s not found, check your configuration, program will not start',self._start_time)
 
         _LOGGER.debug('Start Time %s: %s',self._start_time, hass.states.get(self._start_time))
         template = "states('sensor.time')" + " + ':00' == states('" + self._start_time + "') "
 
         if self._irrigation_on is not None:
             _LOGGER.debug('Irrigation on %s: %s',self._irrigation_on, hass.states.get(self._irrigation_on))
-            if  hass.states.async_available(self._irrigation_on):
-                _LOGGER.warning('%s not found, check your configuration',self._irrigation_on)
-            else:
-                template = template + " and is_state('" + self._irrigation_on + "', 'on') "
+            template = template + " and is_state('" + self._irrigation_on + "', 'on') "
 
         if self._run_days is not None:
             _LOGGER.debug('Run Days %s: %s',self._run_days, hass.states.get(self._run_days))
-            if  hass.states.async_available(self._run_days):
-                _LOGGER.warning('%s not found, check your configuration',self._run_days)
-            else:
-                template = template + " and now().strftime('%a') in states('" + self._run_days + "')"
+            template = template + " and now().strftime('%a') in states('" + self._run_days + "')"
 
         if self._run_freq is not None:
             _LOGGER.debug('Run Frequency %s: %s',self._run_freq, hass.states.get(self._run_freq))
-            if  hass.states.async_available(self._run_freq):
-                _LOGGER.warning('%s not found, check your configuration',self._run_freq)
-            else:
-                template = template + \
-                        " and states('" + run_freq + "')|int" + \
-                        " <= ((as_timestamp(now()) " + \
-                        "- as_timestamp(states." + self.entity_id + \
-                        ".attributes.last_ran) | int) /86400) | int(0) "
+            template = template + \
+                    " and states('" + run_freq + "')|int" + \
+                    " <= ((as_timestamp(now()) " + \
+                    "- as_timestamp(states." + self.entity_id + \
+                    ".attributes.last_ran) | int) /86400) | int(0) "
 
         template = "{{ " + template + " }}"
 
@@ -219,9 +208,9 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
 
     async def async_added_to_hass(self):
 
-        state     = await self.async_get_last_state()
+        state = await self.async_get_last_state()
         try:
-            self._last_run = state.attributes.get('last_ran')
+            self._last_run = state.attributes.get(ATTR_LAST_RAN)
         except:
             """ default to 10 days ago for new programs """
             now       = dt_util.utcnow() - timedelta(days=10)
@@ -229,9 +218,11 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
             if self._last_run is None:
                 self._last_run = dt_util.as_local(time_date).date().isoformat()
 
-        ATTRS      = {'last_ran':self._last_run, ATTR_REMAINING: 0}
+        ATTRS = {}
+        ATTRS [ATTR_LAST_RAN]  = self._last_run
+        ATTRS [ATTR_REMAINING] = 0
         setattr(self, '_state_attributes', ATTRS)
-
+        
         """ house keeping to help ensure solenoids are in a safe state """
         self.hass.bus.async_listen_once(
             EVENT_HOMEASSISTANT_START, self.async_turn_off())
@@ -242,10 +233,41 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
 
         @callback
         def template_sensor_startup(event):
-            """Update template on startup."""
+        """Triggered when HASS has started"""
 
+            """ Validate the referenced objects now that HASS has started"""
+            if  self.hass.states.async_available('sensor.time'):
+                _LOGGER.error('%s :check your configuration, ' + \
+                                'if the entity has not been defined the irriagtion program will not behave as expected' \
+                                ,'sensor.time')
+
+            if  self.hass.states.async_available(self._start_time):
+                _LOGGER.warning('%s not found, check your configuration, ' + \
+                                'this may be due to the slow start of HomeAssistant, ' + \
+                                'if the entity has not been defined the irriagtion program will behave as expected' \
+                                ,self._start_time)
+
+            if self._irrigation_on is not None:
+                if  self.hass.states.async_available(self._irrigation_on):
+                    _LOGGER.warning('%s not found, check your configuration',self._irrigation_on)
+
+            if self._run_days is not None:
+                if  self.hass.states.async_available(self._run_days):
+                    _LOGGER.warning('%s not found, check your configuration',self._run_days)
+
+            if self._run_freq is not None:
+                if  self.hass.states.async_available(self._run_freq):
+                    _LOGGER.warning('%s not found, check your configuration',self._run_freq)
+
+            if  self.hass.states.async_available('sensor.time'):
+                _LOGGER.error('%s :check your configuration, ' + \
+                                'if the entity has not been defined the irriagtion program will not behave as expected' \
+                                ,'sensor.time')                
+
+            """Update template on startup """
             async_track_state_change(
                 self.hass, 'sensor.time', template_check)
+
 
         self.hass.bus.async_listen_once(
             EVENT_HOMEASSISTANT_START, template_sensor_startup)
@@ -420,7 +442,9 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
 
             self._runtime = (((z_water + z_wait) * z_repeat) - z_wait) * 60
             """Set time remaining attribute """
-            ATTRS = {'last_ran': self._last_run, ATTR_REMAINING: self._runtime}
+            ATTRS = {}
+            ATTRS [ATTR_LAST_RAN] = self._last_run
+            ATTRS [ATTR_REMAINING] = self._runtime
             setattr(self, '_state_attributes', ATTRS)
  
             """ run the watering cycle, water/wait/repeat """
@@ -442,7 +466,9 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
                 water = z_water * 60
                 for w in range(0,water, step):
                     self._runtime = self._runtime - step
-                    ATTRS = {'last_ran': self._last_run, ATTR_REMAINING: self._runtime}
+                    ATTRS = {}
+                    ATTRS [ATTR_LAST_RAN] = self._last_run
+                    ATTRS [ATTR_REMAINING] = self._runtime
                     setattr(self, '_state_attributes', ATTRS)
                     self.async_schedule_update_ha_state()
                     await asyncio.sleep(step)
@@ -462,7 +488,9 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
                     wait = z_wait * 60
                     for w in range(0,wait, step):
                         self._runtime = self._runtime - step
-                        ATTRS = {'last_ran': self._last_run, ATTR_REMAINING: self._runtime}
+                        ATTRS = {}
+                        ATTRS [ATTR_LAST_RAN] = self._last_run
+                        ATTRS [ATTR_REMAINING] = self._runtime
                         setattr(self, '_state_attributes', ATTRS)
                         self.async_schedule_update_ha_state()
                         await asyncio.sleep(step)
@@ -484,7 +512,9 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
             time_date      = dt_util.start_of_local_day(dt_util.as_local(now))
             self._last_run = dt_util.as_local(time_date).date().isoformat()
 
-        ATTRS = {'last_ran':self._last_run, ATTR_REMAINING: 0}
+        ATTRS = {}
+        ATTRS [ATTR_LAST_RAN] = self._last_run
+        ATTRS [ATTR_REMAINING] = self._runtime
         setattr(self, '_state_attributes', ATTRS)
 
         self._state                 = False
