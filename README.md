@@ -1,3 +1,9 @@
+# This repository is not longer being maintained: 
+
+## Please visit:
+https://github.com/petergridge/irrigation_component_v4
+
+
 # Irrigation Component V3
 The driver for this project is to provide an easy to configure user interface for the gardener of the house. The goal is that once the inital configuration is done all the features can be modified through lovelace cards. 
 
